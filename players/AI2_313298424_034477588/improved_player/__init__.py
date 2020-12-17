@@ -6,21 +6,20 @@ import time
 from collections import defaultdict
 
 
-MIN_DEEPENING_DEPTH = 4
-# The ID of the "back" row for each player.
-ROW_BEFORE_BACK_ROW = {
-    RED_PLAYER: BOARD_ROWS - 2,
-    BLACK_PLAYER: 1
-}
+MIN_DEEPENING_DEPTH = 5
 
 
 class Player(simple_player.Player):
     def __init__(self, setup_time, player_color, time_per_k_turns, k):
         simple_player.Player.__init__(self, setup_time, player_color, time_per_k_turns, k)
-        #self.opponent_color = OPPONENT_COLOR[player_color]
-        #self.opponent_row_before_back_row = ROW_BEFORE_BACK_ROW[self.opponent_color]
 
-
+    """
+    This method returns the next move of the player by using a minmax search with pruning. The method uses a smart
+    time allocation mechanism. The method performs a minmax search layer by layer, but in case the alpha value and
+    next move have not changed in 3 layer cycles (Starting from 5 layer), the method stops the search and returns the
+    best move so far, thus saving time for future moves.
+    When the last move of the cycle is played the method exausts all the remaining time
+    """
     def get_move(self, game_state, possible_moves):
         self.clock = time.process_time()
         self.time_for_current_move = self.time_remaining_in_round / self.turns_remaining_in_round - 0.05
@@ -65,13 +64,14 @@ class Player(simple_player.Player):
                 print('no more time')
                 break
 
-
+            # Check if alpha has not changed and next move has not changed
             if (prev_alpha == alpha) and (move.origin_loc == best_move.origin_loc) \
                     and (move.target_loc == best_move.target_loc) and (current_depth > MIN_DEEPENING_DEPTH):
-                roundsNotChanged += 1
+                roundsNotChanged += 1   # alpha and move were not changes - Increment counter
             else:
-                roundsNotChanged = 0
+                roundsNotChanged = 0    # alpha or move were changed - Reset counter
 
+            # alpha and best move have not changed in 3 cycles, stop searching for new moves and sace time for future moves
             if (roundsNotChanged == 3) and (self.turns_remaining_in_round > 1):
                 print('Best move and alpha has not changed for {} rounds, depth is {}.'.format(roundsNotChanged, current_depth))
                 break
@@ -98,24 +98,15 @@ class Player(simple_player.Player):
             self.time_remaining_in_round -= (time.process_time() - self.clock)  # Update remaining time
         return best_move
 
+    """
+    This method is used for selective deepening during the minmax search algorithm. In case the next move is a capture,
+    this is a move that worths further investigation, thus the method forces the algorithm to keep searching even if 
+    the depth limit was reached
+    """
     def selective_deepening_criterion(self, state):
         possible_capture_moves = state.calc_capture_moves()
         if possible_capture_moves:
             return True # Next move is a capture - Go to a deeper level
-
-        """
-        for col in range(BOARD_COLS):
-            curLoc = (self.opponent_row_before_back_row, col)   # Iterate through all location of row before back row of opponent
-            if state.board[curLoc] == PAWN_COLOR[self.opponent_color]:    # There is an opponent pawn in last row before back row
-                next_col = col-1
-                if (next_col >= 0) and state.board[(BACK_ROW[self.opponent_color], next_col)] == EM:
-                    print(f"Cur loc={curLoc}, pawn={state.board[curLoc]}, next=({BACK_ROW[self.opponent_color]},{next_col}), state={state.board[(BACK_ROW[self.opponent_color], next_col)]}")
-                    return True # Next location is empty = Opponent is going to have a king - Go to a deeper level
-                next_col = col + 1
-                if (next_col < BOARD_COLS) and state.board[(BACK_ROW[self.opponent_color], next_col)] == EM:
-                    print(f"Cur loc={curLoc}, pawn={state.board[curLoc]}, next=({BACK_ROW[self.opponent_color]},{next_col}), state={state.board[(BACK_ROW[self.opponent_color], next_col)]}")
-                    return True  # Next location is empty = Opponent is going to have a king - Go to a deeper level
-        """
 
         return False
 
